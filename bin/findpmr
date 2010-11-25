@@ -1,0 +1,283 @@
+#! /usr/bin/perl
+#######################################################################
+# $Id: findpmr,v 1.12 2010-11-25 21:00:55 dpchrist Exp $
+#######################################################################
+# preliminaries:
+#----------------------------------------------------------------------
+
+use strict;
+use warnings;
+
+#######################################################################
+# constants:
+#----------------------------------------------------------------------
+
+use constant DEBUG		=> 0;
+
+use constant EXIT_GETOPTIONS_FAILED => 2;
+use constant EXIT_HELP		=> 0;
+use constant EXIT_MAN		=> 0;
+use constant EXIT_NO_ARGS	=> 1;
+use constant MAKEFILE_PL	=> 'Makefile.PL';
+use constant RX_VERSION_FROM	=> qr/VERSION_FROM[^']*'([^']*)'/;
+use constant RX_VERSION		=> qr/(\$VERSION[^;]+;)/;
+
+#######################################################################
+# modules:
+#----------------------------------------------------------------------
+
+use Cwd;
+use Data::Dumper;
+use Dpchrist::Debug		qw( :all );
+use Dpchrist::LangUtil		qw( :all );
+use ExtUtils::MakeMaker;
+use File::Find;
+use File::Slurp;
+use File::Spec::Functions;
+use Getopt::Long;
+use Pod::Usage;
+
+local $Data::Dumper::Sortkeys	= 1;
+
+#######################################################################
+# globals:
+#----------------------------------------------------------------------
+
+local $|			= 1;
+
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.12 $ =~ /(\d+)/g);
+
+our $exitval			= 0;
+our @modroots			= ();
+our $opt			= {};
+
+#######################################################################
+# subroutines:
+#----------------------------------------------------------------------
+
+sub get_version
+{
+    ddump('entry', [\@_], [qw(*_)]) if DEBUG;
+    
+    my $dir = shift;
+
+    my $version = 'unknown';
+
+    my $makefile = catfile($_, MAKEFILE_PL);
+    ddump([$makefile], [qw(makefile)]) if DEBUG;
+
+    my $text = eval{ read_file($makefile) }
+	or goto DONE;
+
+    $text =~ RX_VERSION_FROM;
+    ddump([$text], [qw(text)]) if DEBUG;
+
+    my $version_from = $1
+	or goto DONE;
+    ddump([$version_from], [qw(version_from)]) if DEBUG;
+
+    my $version_file = catfile($dir, $version_from);
+    ddump([$version_file], [qw(version_file)]) if DEBUG;
+
+    $version = MM->parse_version($version_file);
+
+    ddump('return', [$version], [qw(version)]) if DEBUG;
+    return $version;
+}
+
+#----------------------------------------------------------------------
+
+sub wanted_modroots
+{
+    return unless $_ eq MAKEFILE_PL;
+    
+    {
+	no warnings;
+	ddump([$_, $File::Find::dir, $File::Find::name],
+	    [qw(_   File::Find::dir   File::Find::name)]) if DEBUG;
+    }
+
+    push @modroots, $File::Find::dir;
+}
+
+#######################################################################
+# main script:
+#----------------------------------------------------------------------
+
+{
+    ddump('entry', [$0, \%ENV, \@ARGV], [qw(0 *ENV *ARGV)]) if DEBUG;
+    ### process command line options:
+
+    my $starting_dir = getcwd;
+
+    Getopt::Long::Configure("bundling");
+
+    my $r = GetOptions(
+	'command|c=s'	=> \$opt->{-command },
+	'force|f'	=> \$opt->{-force   },
+	'help|h|?'	=> \$opt->{-help    },
+	'man'		=> \$opt->{-man     },
+	'verbose|v+'	=> \$opt->{-verbose },
+	'versions|V'	=> \$opt->{-version },
+    ) or $exitval = EXIT_GETOPTIONS_FAILED, goto DONE;
+    ddump([$opt], [qw(opt)]) if DEBUG;
+
+    if ($opt->{-help}) {
+	pod2usage(-exitval => 'NOEXIT', -verbose => 1);
+	goto DONE;
+    }
+
+    if ($opt->{-man}) {
+	pod2usage(-exitval => 'NOEXIT', -verbose => 2);
+	goto DONE;
+    }
+
+    ddump([-t STDIN], ['-t STDIN']) if DEBUG;
+
+    chomp(@ARGV = <STDIN>) if !@ARGV && !-t STDIN;
+    ddump([\@ARGV], [qw(*ARGV)]) if DEBUG;
+
+    unless (@ARGV) {
+	pod2usage(-exitval => 'NOEXIT', -verbose => 0);
+	$exitval = EXIT_NO_ARGS;
+	goto DONE;
+    }
+
+    find(\&wanted_modroots, @ARGV);
+    ddump([\@modroots], [qw(*modroots)]) if DEBUG;
+
+    my $fmt = "%s\n";
+    $fmt = '%+13s   ' . $fmt if $opt->{-version};
+
+    foreach (sort @modroots) {
+	my @args = ($_);
+	unshift @args, get_version($_) if $opt->{-version};
+	ddump([$fmt, \@args], [qw(fmt *args)]) if DEBUG;
+	printf $fmt, @args;
+	if ($opt->{-command}) {
+	    chdir $_;
+	    eval {
+		$exitval = echo_system($opt->{-command});
+		if ($? == -1) {
+		    print "failed to execute: $!\n";
+		}
+		elsif ($? & 127) {
+		    printf "child died with signal %d, %s coredump\n",
+		    ($? & 127),  ($? & 128) ? 'with' : 'without';
+		}
+		elsif ($?) {
+		    printf "child exited with value %d\n", $? >> 8;
+		}
+	    };
+	    ddump([$exitval], [qw(exitval)]) if DEBUG;
+	    last if $exitval && !$opt->{-force};
+	    chdir $starting_dir;
+	}
+    }
+
+  DONE:
+
+    ddump('exit', [$exitval], [qw(exitval)]) if DEBUG;
+    exit $exitval;
+}
+
+#######################################################################
+# end of code:
+#----------------------------------------------------------------------
+
+__END__
+
+#######################################################################
+
+=head1 NAME
+
+findpmr - find Perl module root directories
+
+
+=head1 SYNOPSIS
+
+    findpmr [Options] [PATH...]
+
+    Options:
+	--command, -c STRING  Call system(STRING) in directories found 
+	--force, -f           Ignore system() errors
+	--help, -h, -?        Print a brief help message and exit
+	--man                 Print the manual page and exit
+	--version, -V         Print module version
+	--verbose, -v         Print informational messages on STDERR
+
+
+=head1 DESCRIPTION
+
+Recursively searchs PATH
+and prints paths to Perl module source code root directories.
+
+=head2 OPTIONS
+
+=head4 --command
+
+Invoke command STRING via system()
+in each Perl module root directory found.
+
+=head4 --force
+
+Ignore errors generated by system() calls.
+
+=head4 --help
+
+Prints SYNOPSIS and OPTIONS sections of documenation.
+
+=head4 --man
+
+Displays manual page via pager.
+
+=head4 --verbose
+
+Option may be given multiple times.
+More information is printed as verbosity increases.
+
+=head4 --version
+
+Prints the module version before the path for each module.
+
+If PATH is omitted,
+reads file/ directory names from STDIN (Unix filter).
+
+
+=head1 INSTALLATION
+
+Minimal:
+
+    cpan Dpchrist::Scripts
+
+Complete:
+
+    cpan Bundle::Dpchrist
+
+
+=head1 AUTHOR
+
+David Paul Christensen dpchrist@holgerdanske.com
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2010 by David Paul Chirstensen dpchrist@holgerdanske.com
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; version 2.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307,
+USA.
+
+=cut
+
+#######################################################################
