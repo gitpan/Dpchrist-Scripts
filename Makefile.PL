@@ -1,5 +1,5 @@
 #######################################################################
-# $Id: Makefile.PL,v 1.7 2010-11-27 03:37:59 dpchrist Exp $
+# $Id: Makefile.PL,v 1.8 2010-11-27 07:37:16 dpchrist Exp $
 #
 # Copyright 2010 by David Paul Christensen dpchrist@holgerdanske.com
 #
@@ -39,9 +39,9 @@ WriteMakefile(
     NAME		=> 'Dpchrist::Scripts',
     VERSION_FROM	=> 'lib/Dpchrist/Scripts.pm',
     PREREQ_PM		=> {
-	Dpchrist::Debug		=> 1.043,
-	Dpchrist::LangUtil	=> 1.012,
-	Dpchrist::Module	=> 1.025,
+	Dpchrist::Debug		=> 1.044,
+	Dpchrist::LangUtil	=> 1.013,
+	Dpchrist::Module	=> 1.026,
 	File::Slurp		=> 0,
 	Getopt::Long		=> 0,
 	Pod::Html		=> 0,

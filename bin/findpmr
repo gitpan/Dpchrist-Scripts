@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #######################################################################
-# $Id: findpmr,v 1.12 2010-11-25 21:00:55 dpchrist Exp $
+# $Id: findpmr,v 1.13 2010-11-27 08:04:12 dpchrist Exp $
 #######################################################################
 # preliminaries:
 #----------------------------------------------------------------------
@@ -45,7 +45,7 @@ local $Data::Dumper::Sortkeys	= 1;
 
 local $|			= 1;
 
-our $VERSION = sprintf("%d.%03d", q$Revision: 1.12 $ =~ /(\d+)/g);
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.13 $ =~ /(\d+)/g);
 
 our $exitval			= 0;
 our @modroots			= ();
@@ -96,6 +96,9 @@ sub wanted_modroots
 	ddump([$_, $File::Find::dir, $File::Find::name],
 	    [qw(_   File::Find::dir   File::Find::name)]) if DEBUG;
     }
+
+    ### skip distribution temporary directories
+    return if $File::Find::dir =~ /\d+\.\d+$/;
 
     push @modroots, $File::Find::dir;
 }
