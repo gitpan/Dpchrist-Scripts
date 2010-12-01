@@ -1,5 +1,5 @@
 #######################################################################
-# $Id: Scripts.pm,v 1.12 2010-11-27 08:04:12 dpchrist Exp $
+# $Id: Scripts.pm,v 1.13 2010-11-30 20:20:15 dpchrist Exp $
 #######################################################################
 # package:
 #----------------------------------------------------------------------
@@ -9,7 +9,7 @@ package Dpchrist::Scripts;
 use strict;
 use warnings;
 
-our $VERSION = sprintf("%d.%03d", q$Revision: 1.12 $ =~ /(\d+)/g);
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.13 $ =~ /(\d+)/g);
 
 1;
 
@@ -24,7 +24,7 @@ Dpchrist::Scripts - Perl scripts by David Christensen
 
 =head1 DESCRIPTION
 
-This documentation describes module revision $Revision: 1.12 $.
+This documentation describes module revision $Revision: 1.13 $.
 
 
 This is alpha test level software
