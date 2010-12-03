@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #######################################################################
-# $Id: findpmr,v 1.13 2010-11-27 08:04:12 dpchrist Exp $
+# $Id: findpmr,v 1.15 2010-12-03 02:23:10 dpchrist Exp $
 #######################################################################
 # preliminaries:
 #----------------------------------------------------------------------
@@ -45,20 +45,125 @@ local $Data::Dumper::Sortkeys	= 1;
 
 local $|			= 1;
 
-our $VERSION = sprintf("%d.%03d", q$Revision: 1.13 $ =~ /(\d+)/g);
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.15 $ =~ /(\d+)/g);
 
 our $exitval			= 0;
 our @modroots			= ();
-our $opt			= {};
+our $opt = {
+    -print			=> 1,
+};
+our %requires;
+our %uses;
 
 #######################################################################
 # subroutines:
 #----------------------------------------------------------------------
 
-sub get_version
+sub do_command
 {
-    ddump('entry', [\@_], [qw(*_)]) if DEBUG;
-    
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my ($dir, $command) = @_;
+
+    my $starting_dir = getcwd;
+
+    print '# command: ', $command, "\n";
+    chdir $dir;
+
+    eval {
+	system($command);
+	if ($? == -1) {
+	    die "failed to execute: $!\n";
+	}
+	elsif ($? & 127) {
+	    die sprintf "child died with signal %d, %s coredump\n",
+	    ($? & 127),  ($? & 128) ? 'with' : 'without';
+	}
+	elsif ($?) {
+	    die "child exited with value %d\n", $? >> 8;
+	}
+    };
+    die $@ if $@ && !$opt->{-force};
+
+    chdir $starting_dir;
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub do_requires
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my $dir = shift;
+
+    %uses = %requires = ();
+
+    find(\&wanted_uses_requires, $dir);
+    ddump([\%uses, \%requires], [qw(uses requires)]) if DEBUG;
+
+    print "# requires:\n";
+    print join "\n", sort keys %requires;
+    print "\n" if keys %requires;
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub do_uses
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my $dir = shift;
+
+    %uses = %requires = ();
+
+    find(\&wanted_uses_requires, $dir);
+    ddump([\%uses, \%requires], [qw(uses requires)]) if DEBUG;
+
+    print "# uses:\n";
+    print join "\n", sort keys %uses;
+    print "\n" if keys %uses;
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub do_uses_requires
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my $dir = shift;
+
+    %uses = %requires = ();
+
+    find(\&wanted_uses_requires, $dir);
+    ddump([\%uses, \%requires], [qw(uses requires)]) if DEBUG;
+
+    my %union;
+    map {$union{$_}++} keys %uses;
+    map {$union{$_}++} keys %requires;
+
+    print "# uses/requires:\n";
+    print join "\n", sort keys %union;
+    print "\n" if keys %union;
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub do_version
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
     my $dir = shift;
 
     my $version = 'unknown';
@@ -81,26 +186,63 @@ sub get_version
 
     $version = MM->parse_version($version_file);
 
-    ddump('return', [$version], [qw(version)]) if DEBUG;
-    return $version;
+    print "# version: $version\n";
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub wanted_uses_requires
+{
+    ddump('call', [\@_], [qw(*_)]) if 1 < DEBUG;
+    
+    goto DONE if -d $_ || $_ =~ /\.swp$/;
+
+    ddump([$_, $File::Find::dir, $File::Find::name],
+	[qw(_   File::Find::dir   File::Find::name)]) if 1 < DEBUG;
+
+    my @lines = read_file($_);
+
+    foreach my $line (@lines) {
+	if ($line =~ /^[^#]*use\s+([A-Z]\w+(?:\:\:[A-Z]\w+)*)/) {
+    	    $uses{$1}++;
+	    ddump([$line, $1], [qw(line 1)]) if DEBUG;
+	}
+	if ($line =~ /^[^#]*require\s+([A-Z]\w+(?:\:\:[A-Z]\w+)*)/) {
+    	    $requires{$1}++;
+	    ddump([$line, $1], [qw(line 1)]) if DEBUG;
+	}
+    }
+
+  DONE:
+
+    dprint 'return' if 1 < DEBUG;
+    return;
 }
 
 #----------------------------------------------------------------------
 
 sub wanted_modroots
 {
-    return unless $_ eq MAKEFILE_PL;
+    ddump('call', [\@_], [qw(*_)]) if 1 < DEBUG;
     
-    {
-	no warnings;
-	ddump([$_, $File::Find::dir, $File::Find::name],
-	    [qw(_   File::Find::dir   File::Find::name)]) if DEBUG;
-    }
+    goto DONE unless $_ eq MAKEFILE_PL;
+    
+    ddump([$_, $File::Find::dir, $File::Find::name],
+	[qw(_   File::Find::dir   File::Find::name)]) if 1 < DEBUG;
 
     ### skip distribution temporary directories
     return if $File::Find::dir =~ /\d+\.\d+$/;
 
     push @modroots, $File::Find::dir;
+    ddump([$File::Find::dir], [qw(File::Find::dir)]) if DEBUG;
+
+  DONE:
+
+    dprint 'return' if 1 < DEBUG;
+    return;
 }
 
 #######################################################################
@@ -109,9 +251,6 @@ sub wanted_modroots
 
 {
     ddump('entry', [$0, \%ENV, \@ARGV], [qw(0 *ENV *ARGV)]) if DEBUG;
-    ### process command line options:
-
-    my $starting_dir = getcwd;
 
     Getopt::Long::Configure("bundling");
 
@@ -120,6 +259,9 @@ sub wanted_modroots
 	'force|f'	=> \$opt->{-force   },
 	'help|h|?'	=> \$opt->{-help    },
 	'man'		=> \$opt->{-man     },
+	'print|p'	=> \$opt->{-print   },
+	'requires|r'	=> \$opt->{-requires},
+	'uses|u'	=> \$opt->{-uses    },
 	'verbose|v+'	=> \$opt->{-verbose },
 	'versions|V'	=> \$opt->{-version },
     ) or $exitval = EXIT_GETOPTIONS_FAILED, goto DONE;
@@ -135,7 +277,7 @@ sub wanted_modroots
 	goto DONE;
     }
 
-    ddump([-t STDIN], ['-t STDIN']) if DEBUG;
+    ddump([-t STDIN], ['t_STDIN']) if DEBUG;
 
     chomp(@ARGV = <STDIN>) if !@ARGV && !-t STDIN;
     ddump([\@ARGV], [qw(*ARGV)]) if DEBUG;
@@ -153,29 +295,26 @@ sub wanted_modroots
     $fmt = '%+13s   ' . $fmt if $opt->{-version};
 
     foreach (sort @modroots) {
-	my @args = ($_);
-	unshift @args, get_version($_) if $opt->{-version};
-	ddump([$fmt, \@args], [qw(fmt *args)]) if DEBUG;
-	printf $fmt, @args;
-	if ($opt->{-command}) {
-	    chdir $_;
-	    eval {
-		$exitval = echo_system($opt->{-command});
-		if ($? == -1) {
-		    print "failed to execute: $!\n";
-		}
-		elsif ($? & 127) {
-		    printf "child died with signal %d, %s coredump\n",
-		    ($? & 127),  ($? & 128) ? 'with' : 'without';
-		}
-		elsif ($?) {
-		    printf "child exited with value %d\n", $? >> 8;
-		}
-	    };
-	    ddump([$exitval], [qw(exitval)]) if DEBUG;
-	    last if $exitval && !$opt->{-force};
-	    chdir $starting_dir;
+
+	print "\n";
+
+	print($_, "\n") if $opt->{-print};
+
+	do_version($_) if $opt->{-version};
+
+	if ($opt->{-uses}) {
+	    if ($opt->{-requires}) {
+		do_uses_requires($_);
+	    }
+	    else {
+		do_uses($_);
+	    }
 	}
+	elsif ($opt->{-requires}) {
+	    do_requires($_);
+	}
+
+	do_command($_, $opt->{-command}) if $opt->{-command};
     }
 
   DONE:

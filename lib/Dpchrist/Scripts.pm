@@ -1,5 +1,5 @@
 #######################################################################
-# $Id: Scripts.pm,v 1.13 2010-11-30 20:20:15 dpchrist Exp $
+# $Id: Scripts.pm,v 1.14 2010-12-03 02:23:10 dpchrist Exp $
 #######################################################################
 # package:
 #----------------------------------------------------------------------
@@ -9,7 +9,7 @@ package Dpchrist::Scripts;
 use strict;
 use warnings;
 
-our $VERSION = sprintf("%d.%03d", q$Revision: 1.13 $ =~ /(\d+)/g);
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.14 $ =~ /(\d+)/g);
 
 1;
 
@@ -24,7 +24,7 @@ Dpchrist::Scripts - Perl scripts by David Christensen
 
 =head1 DESCRIPTION
 
-This documentation describes module revision $Revision: 1.13 $.
+This documentation describes module revision $Revision: 1.14 $.
 
 
 This is alpha test level software
@@ -50,13 +50,6 @@ Minimal:
 Complete:
 
     $ cpan Bundle::Dpchrist
-
-The following warning may be safely ignored:
-
-    Can't locate Dpchrist/Module/MakefilePL.pm in @INC (@INC contains: /
-    etc/perl /usr/local/lib/perl/5.10.0 /usr/local/share/perl/5.10.0 /us
-    r/lib/perl5 /usr/share/perl5 /usr/lib/perl/5.10 /usr/share/perl/5.10
-    /usr/local/lib/site_perl .) at Makefile.PL line 22.
 
 
 =head2 PREREQUISITES
