@@ -1,0 +1,176 @@
+#! /usr/bin/perl
+#######################################################################
+# $Id: pmver,v 1.4 2010-12-05 06:47:41 dpchrist Exp $
+#######################################################################
+
+use constant DEBUG		=> 0;
+
+use strict;
+use warnings;
+
+use Capture::Tiny		qw( capture );
+use Dpchrist::Debug		qw( :all );
+use ExtUtils::MakeMaker;
+use Getopt::Long;
+use Pod::Usage;
+
+use constant EXIT_GETOPTIONS_FAILED => 2;
+use constant EXIT_HELP          => 0;
+use constant EXIT_MAN           => 0;
+use constant EXIT_NO_ARGS       => 1;
+use constant SKIP_MODULES	=> {
+	AutoSplit		=> 1,
+};
+
+$! = 1				if DEBUG;
+$Data::Dumper::Sortkeys = 1	if DEBUG;
+
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.4 $ =~ /(\d+)/g);
+
+our $exitval                    = 0;
+our $opt;
+
+#######################################################################
+# script:
+#----------------------------------------------------------------------
+
+{
+    ddump('entry', [$0, \@ARGV], [qw(0 *ARGV)]) if DEBUG;
+    
+    Getopt::Long::Configure("bundling");
+
+    my $r = GetOptions(
+    	'help|h|?'      => \$opt->{-help    },
+	'man'           => \$opt->{-man     },
+	'verbose|v+'    => \$opt->{-verbose },
+    ) or $exitval = EXIT_GETOPTIONS_FAILED, goto DONE;
+    ddump([$opt], [qw(opt)]) if DEBUG;
+
+    if ($opt->{-help}) {
+	pod2usage(-exitval => 'NOEXIT', -verbose => 1);
+	goto DONE;
+    }
+
+    if ($opt->{-man}) {
+	pod2usage(-exitval => 'NOEXIT', -verbose => 2);
+	goto DONE;
+    }
+
+    ddump([-t STDIN], ['t_STDIN']) if DEBUG;
+
+    chomp(@ARGV = <STDIN>) if !@ARGV && !-t STDIN;
+    ddump([\@ARGV], [qw(*ARGV)]) if DEBUG;
+
+    unless (@ARGV) {
+	pod2usage(-exitval => 'NOEXIT', -verbose => 0);
+	$exitval = EXIT_NO_ARGS;
+	goto DONE;
+    }
+
+    foreach my $module (@ARGV) {
+	ddump([$module], [qw(module)]) if DEBUG;
+
+	next if !-t STDIN && $module =~ /^#/;
+
+	next if SKIP_MODULES->{$module};
+
+	(my $file = $module) =~ s#\:\:#\/#g;
+	$file .= '.pm';
+	ddump([$file], [qw(file)]) if DEBUG;
+
+	ddump([\%INC], [qw(*INC)]) if 1 < DEBUG;
+
+	my $path = $INC{$file};
+	unless ($INC{$file}) {
+	    ddump([$path], [qw(path)]) if DEBUG;
+	    my $r;
+	    my ($stdout, $stderr) = capture {
+		$r = eval {
+		    require $file;
+		};
+	    };
+	    ddump([$stdout, $stderr, $r, $@],
+		[qw(stdout   stderr   r   @)]) if DEBUG;
+	}
+
+	$path = $INC{$file};
+	ddump([$path], [qw(path)]) if DEBUG;
+
+	unless (defined $path) {
+	    warn "file '$file' not found in \$INC{}";
+	    next;
+	}
+	unless (-e $path) {
+	    warn "path '$path' not found";
+	    next;
+	}
+
+	my $version = MM->parse_version($path);
+
+	print "$module\t=> $version,\n";
+    }
+
+  DONE:
+
+    ddump('exit', [$exitval], [qw(exitval)]) if DEBUG;
+    exit $exitval;
+}
+
+#######################################################################
+# end of code:
+#======================================================================
+
+__END__
+
+#######################################################################
+
+=head1 NAME
+
+pmver - find and print Perl module versions
+
+
+=head1 SYNOPSIS
+
+    pmver MODULE...
+
+
+=head1 DESCRIPTION
+
+    2010-12-04 11:25:19 dpchrist@p43400e ~
+    $ Dpchrist-Scripts/perl-bin/pmver Carp Data::Dumper Test::More           
+    Carp	=> 1.08;
+    Data::Dumper	=> 2.121_14;
+    Test::More	=> 0.72;
+
+
+=head1 INSTALLATION
+
+Installed as part of Dpchrist::Scripts.
+
+
+=head1 AUTHOR
+
+David Paul Christensen dpchrist@holgerdanske.com
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2010 by David Paul Chirstensen dpchrist@holgerdanske.com
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; version 2.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307,
+USA.
+
+=cut
+
+#######################################################################

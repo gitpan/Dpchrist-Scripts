@@ -1,0 +1,149 @@
+#! /usr/bin/perl
+#######################################################################
+# $Id: csvinfo,v 1.3 2010-12-04 19:36:22 dpchrist Exp $
+#######################################################################
+
+use constant DEBUG		=> 0;
+
+use strict;
+use warnings;
+
+use Data::Dumper;
+use Dpchrist::Debug		qw( :all );
+use Dpchrist::Term		qw( dot );
+use File::Slurp;
+use Text::CSV_XS;
+
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.3 $ =~ /(\d+)/g);
+
+die "usage: $0 FILE" unless @ARGV == 1;
+
+my $file = shift;
+
+my $csv = Text::CSV_XS->new({binary => 1, eol => $/})
+    or die 'ERROR: Text::CSV_XS->new() failed ',
+    Text::CSV_XS->error_diag();
+
+print "Reading comma-seperated value file '$file'";
+
+open my $f, "<", $file
+    or die "ERROR: failed to open file '$file': $!";
+
+my $header = $csv->getline($f);
+ddump([$header], [qw(header)]) if 1 < DEBUG;
+
+my $n_fields = scalar @$header;
+
+my @field_name_lengths = map length($_), @$header;
+my $max_field_name_length = 0;
+for (my $i = 0; $i < $n_fields; $i++) {
+    my $l = length $header->[$i];
+    $max_field_name_length = $l
+	if $max_field_name_length < $l;
+}
+
+#my @recs;
+my $n_recs = 0;
+my @max_field_lengths;
+while (my $rec = $csv->getline($f)) {
+    dot();
+    my $n = scalar @$rec;
+    warn join(' ', "WARNING: at line $.",
+	"found $n fields instead of $n_fields",
+	Data::Dumper->Dump([$rec], [qw(rec)]),
+    ) unless $n == $n_fields;
+#    push @recs, $rec;
+    $n_recs++;
+    my @l = map length($_), @$rec;
+    for (my $i = 0; $i < $n; $i++) {
+	$max_field_lengths[$i] = $l[$i]    
+    	    if !defined($max_field_lengths[$i])
+	    || $max_field_lengths[$i] < $l[$i];
+    }
+}
+#ddump([\@recs], [qw(*recs)]) if 1 < DEBUG;
+ddump([\@max_field_lengths], [qw(*max_field_lengths)]) if DEBUG;
+
+close $f;
+
+# my $n_recs = scalar @recs;
+
+print join("\n",
+    "\nFound $n_fields fields and $n_recs records",
+    "Maximum field name length is $max_field_name_length",
+    "Maximum field content lengths are as follows:\n\n",
+);
+
+my $w = 5;
+$w = $max_field_name_length if $w < $max_field_name_length;
+my $x = 3;
+map {$x = length($_) if $x < length($_)} @max_field_lengths;
+
+print sprintf("%-*s  %-*s\n", $w, 'Field', $x, 'Max');
+print sprintf("%s  %s\n", '=' x $w, '=' x $x);
+for (my $i = 0; $i < $n_fields; $i++) {
+    print sprintf("%-*s  %*i\n",
+	$w, $header->[$i], $x, $max_field_lengths[$i],
+    );
+}
+
+__END__
+
+#######################################################################
+
+=head1 NAME
+
+csvinfo - check a *.csv file and print useful information
+
+
+=head1 SYNOPSIS
+
+    csvinfo FILE
+
+
+=head1 DESCRIPTION
+
+Read a comma-seperated value file FILE,
+verify that all lines contain the same number of fields,
+and print useful information:
+
+- Number of fields.
+
+- Number of records.
+
+- Maximum field name length.
+
+- Maximum field content lengths.
+
+
+=head1 INSTALLATION
+
+Installed as part of Dpchrist::Scripts.
+
+
+=head1 AUTHOR
+
+David Paul Christensen dpchrist@holgerdanske.com
+
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2010 by David Paul Chirstensen dpchrist@holgerdanske.com
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; version 2.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307,
+USA.
+
+=cut
+
+#######################################################################

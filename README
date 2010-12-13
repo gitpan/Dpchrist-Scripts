@@ -2,7 +2,7 @@ NAME
     Dpchrist::Scripts - Perl scripts by David Christensen
 
 DESCRIPTION
-    This documentation describes module revision $Revision: 1.14 $.
+    This documentation describes module revision $Revision: 1.17 $.
 
     This is alpha test level software and may change or disappear at any
     time.
@@ -29,7 +29,9 @@ INSTALLATION
     See Makefile.PL in the source distribution root directory.
 
 SEE ALSO
+        man csvinfo
         man findpmr
+        man pmver
 
 AUTHOR
     David Paul Christensen dpchrist@holgerdanske.com

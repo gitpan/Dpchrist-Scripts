@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 #######################################################################
-# $Id: findpmr,v 1.15 2010-12-03 02:23:10 dpchrist Exp $
+# $Id: findpmr,v 1.20 2010-12-05 08:36:11 dpchrist Exp $
 #######################################################################
 # preliminaries:
 #----------------------------------------------------------------------
@@ -19,8 +19,14 @@ use constant EXIT_HELP		=> 0;
 use constant EXIT_MAN		=> 0;
 use constant EXIT_NO_ARGS	=> 1;
 use constant MAKEFILE_PL	=> 'Makefile.PL';
-use constant RX_VERSION_FROM	=> qr/VERSION_FROM[^']*'([^']*)'/;
+use constant RX_WRITEMAKEFILE	=> qr/WriteMakefile\(/;
+use constant RX_VERSION_FROM	=> qr/VERSION_FROM[^\']+\'([^\']+)\'/;
 use constant RX_VERSION		=> qr/(\$VERSION[^;]+;)/;
+use constant RX_NAME		=> qr/NAME[^\']+\'([^\']+)\'/;
+use constant RX_REQUIRE		=>
+    qr/^[^#]*require\s+([A-Z]\w+(?:\:\:[A-Z]\w+)*)/;
+use constant RX_USE		=>
+    qr/^[^#]*use\s+([A-Z]\w+(?:\:\:[A-Z]\w+)*)/;
 
 #######################################################################
 # modules:
@@ -29,7 +35,7 @@ use constant RX_VERSION		=> qr/(\$VERSION[^;]+;)/;
 use Cwd;
 use Data::Dumper;
 use Dpchrist::Debug		qw( :all );
-use Dpchrist::LangUtil		qw( :all );
+use Dpchrist::Term		qw( dot );
 use ExtUtils::MakeMaker;
 use File::Find;
 use File::Slurp;
@@ -37,23 +43,19 @@ use File::Spec::Functions;
 use Getopt::Long;
 use Pod::Usage;
 
-local $Data::Dumper::Sortkeys	= 1;
-
 #######################################################################
 # globals:
 #----------------------------------------------------------------------
 
-local $|			= 1;
+local $| = 1			if DEBUG;
+$Data::Dumper::Sortkeys = 1	if DEBUG;
 
-our $VERSION = sprintf("%d.%03d", q$Revision: 1.15 $ =~ /(\d+)/g);
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.20 $ =~ /(\d+)/g);
 
 our $exitval			= 0;
 our @modroots			= ();
-our $opt = {
-    -print			=> 1,
-};
-our %requires;
-our %uses;
+our $opt;
+our %uses_requires;
 
 #######################################################################
 # subroutines:
@@ -67,7 +69,7 @@ sub do_command
 
     my $starting_dir = getcwd;
 
-    print '# command: ', $command, "\n";
+    print "# command: $command\n" unless $opt->{-quiet};
     chdir $dir;
 
     eval {
@@ -77,15 +79,51 @@ sub do_command
 	}
 	elsif ($? & 127) {
 	    die sprintf "child died with signal %d, %s coredump\n",
-	    ($? & 127),  ($? & 128) ? 'with' : 'without';
+		($? & 127),  ($? & 128) ? 'with' : 'without';
 	}
 	elsif ($?) {
 	    die "child exited with value %d\n", $? >> 8;
 	}
     };
-    die $@ if $@ && !$opt->{-force};
+    warn $@ if $@ && !$opt->{-force};
 
     chdir $starting_dir;
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub do_name
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my $meta = get_meta(shift)
+	or goto DONE;
+
+    print '# name: ' unless $opt->{-quiet};
+    print $meta->{NAME}, "\n";
+
+  DONE:
+
+    dprint 'return' if DEBUG;
+    return;
+}
+
+#----------------------------------------------------------------------
+
+sub do_name_version
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my $meta = get_meta(shift)
+	or goto DONE;
+
+    print '# name/version: ' unless $opt->{-quiet};
+    print $meta->{NAME}, "\t", $meta->{VERSION}, "\n";
+
+  DONE:
 
     dprint 'return' if DEBUG;
     return;
@@ -99,14 +137,15 @@ sub do_requires
 
     my $dir = shift;
 
-    %uses = %requires = ();
+    %uses_requires = ();
 
     find(\&wanted_uses_requires, $dir);
-    ddump([\%uses, \%requires], [qw(uses requires)]) if DEBUG;
+    ddump([\%uses_requires], [qw(*uses_requires)]) if DEBUG;
+    print "\n" if $opt->{-dots};
 
-    print "# requires:\n";
-    print join "\n", sort keys %requires;
-    print "\n" if keys %requires;
+    print "# requires:\n" unless $opt->{-quiet};
+    print join "\n", sort keys %uses_requires;
+    print "\n" if keys %uses_requires;
 
     dprint 'return' if DEBUG;
     return;
@@ -120,14 +159,15 @@ sub do_uses
 
     my $dir = shift;
 
-    %uses = %requires = ();
+    %uses_requires = ();
 
     find(\&wanted_uses_requires, $dir);
-    ddump([\%uses, \%requires], [qw(uses requires)]) if DEBUG;
+    ddump([\%uses_requires], [qw(*uses_requires)]) if DEBUG;
+    print "\n" if $opt->{-dots};
 
-    print "# uses:\n";
-    print join "\n", sort keys %uses;
-    print "\n" if keys %uses;
+    print "# uses:\n" unless $opt->{-quiet};
+    print join "\n", sort keys %uses_requires;
+    print "\n" if keys %uses_requires;
 
     dprint 'return' if DEBUG;
     return;
@@ -141,18 +181,15 @@ sub do_uses_requires
 
     my $dir = shift;
 
-    %uses = %requires = ();
+    %uses_requires = ();
 
     find(\&wanted_uses_requires, $dir);
-    ddump([\%uses, \%requires], [qw(uses requires)]) if DEBUG;
+    ddump([\%uses_requires], [qw(*uses_requires)]) if DEBUG;
+    print "\n" if $opt->{-dots};
 
-    my %union;
-    map {$union{$_}++} keys %uses;
-    map {$union{$_}++} keys %requires;
-
-    print "# uses/requires:\n";
-    print join "\n", sort keys %union;
-    print "\n" if keys %union;
+    print "# uses/requires:\n" unless $opt->{-quiet};
+    print join "\n", sort keys %uses_requires;
+    print "\n" if keys %uses_requires;
 
     dprint 'return' if DEBUG;
     return;
@@ -164,29 +201,13 @@ sub do_version
 {
     ddump('call', [\@_], [qw(*_)]) if DEBUG;
 
-    my $dir = shift;
-
-    my $version = 'unknown';
-
-    my $makefile = catfile($_, MAKEFILE_PL);
-    ddump([$makefile], [qw(makefile)]) if DEBUG;
-
-    my $text = eval{ read_file($makefile) }
+    my $meta = get_meta(shift)
 	or goto DONE;
 
-    $text =~ RX_VERSION_FROM;
-    ddump([$text], [qw(text)]) if DEBUG;
+    print '# version: ' unless $opt->{-quiet};
+    print $meta->{VERSION}, "\n";
 
-    my $version_from = $1
-	or goto DONE;
-    ddump([$version_from], [qw(version_from)]) if DEBUG;
-
-    my $version_file = catfile($dir, $version_from);
-    ddump([$version_file], [qw(version_file)]) if DEBUG;
-
-    $version = MM->parse_version($version_file);
-
-    print "# version: $version\n";
+  DONE:
 
     dprint 'return' if DEBUG;
     return;
@@ -194,9 +215,75 @@ sub do_version
 
 #----------------------------------------------------------------------
 
+sub get_meta
+{
+    ddump('call', [\@_], [qw(*_)]) if DEBUG;
+
+    my $dir = shift;
+
+    my $meta;
+
+    my $makefile = catfile($_, MAKEFILE_PL);
+    ddump([$makefile], [qw(makefile)]) if DEBUG;
+
+    my @lines = eval{ read_file($makefile) };
+    if ($@) {
+	warn "WARNING: failed to read file '$makefile': $@";
+	goto DONE;
+    }
+    ddump([\@lines], [qw(*lines)]) if DEBUG;
+
+    $_ = shift @lines until RX_WRITEMAKEFILE;
+
+    my $text = join '', @lines;
+    ddump([$text], [qw(text)]) if DEBUG;
+
+    $text =~ RX_NAME;
+    my $name = $1;
+    unless ($name) {
+	warn 'WARNING: failed to find NAME argument ' .
+	    "in file '$makefile'";
+	goto DONE;
+    }
+    ddump([$name], [qw(name)]) if DEBUG;
+
+    $text =~ RX_VERSION_FROM;
+    my $version_from = $1;
+    unless ($version_from) {
+	warn 'WARNING: failed to find ' .
+	    "VERSION_FROM argument in file '$makefile'";
+	goto DONE;
+    }
+    ddump([$version_from], [qw(version_from)]) if DEBUG;
+
+    my $version_file = catfile($dir, $version_from);
+    ddump([$version_file], [qw(version_file)]) if DEBUG;
+
+    my $version = eval { MM->parse_version($version_file) };
+    if ($@) {
+	warn $@;
+	goto DONE;
+    }
+
+    $meta = {
+	DIRECTORY	=> $dir,
+	NAME		=> $name,
+	VERSION_FROM	=> $version_from,
+	VERSION		=> $version,
+    };
+
+  DONE:
+
+    ddump('return', [$meta], [qw(meta)]) if DEBUG;
+    return $meta;
+}
+
+#----------------------------------------------------------------------
+
 sub wanted_uses_requires
 {
     ddump('call', [\@_], [qw(*_)]) if 1 < DEBUG;
+    dot if $opt->{-dots};
     
     goto DONE if -d $_ || $_ =~ /\.swp$/;
 
@@ -205,15 +292,31 @@ sub wanted_uses_requires
 
     my @lines = read_file($_);
 
+    my @modules;
+
     foreach my $line (@lines) {
-	if ($line =~ /^[^#]*use\s+([A-Z]\w+(?:\:\:[A-Z]\w+)*)/) {
-    	    $uses{$1}++;
+	dot if $opt->{-dots};
+	if ($opt->{-uses} && $line =~ RX_USE) {
+	    push @modules, $1;
 	    ddump([$line, $1], [qw(line 1)]) if DEBUG;
 	}
-	if ($line =~ /^[^#]*require\s+([A-Z]\w+(?:\:\:[A-Z]\w+)*)/) {
-    	    $requires{$1}++;
+	if ($opt->{-requires} && $line =~ RX_REQUIRE) {
+	    push @modules, $1;
 	    ddump([$line, $1], [qw(line 1)]) if DEBUG;
 	}
+    }
+
+    foreach my $module (@modules) {
+	dot if $opt->{-dots};
+	my $pmver = qx/pmver $module/;
+	if ($@) {
+	    warn "WARNING: failed looking up require'd " .
+		"module '" .  $module . "': $!";
+	    next;
+	}
+	ddump([$pmver], [qw(pmver)]) if DEBUG;
+	chomp($pmver);
+	$uses_requires{$pmver}++;
     }
 
   DONE:
@@ -227,6 +330,7 @@ sub wanted_uses_requires
 sub wanted_modroots
 {
     ddump('call', [\@_], [qw(*_)]) if 1 < DEBUG;
+    dot if $opt->{-dots};
     
     goto DONE unless $_ eq MAKEFILE_PL;
     
@@ -256,14 +360,15 @@ sub wanted_modroots
 
     my $r = GetOptions(
 	'command|c=s'	=> \$opt->{-command },
+	'dots|d'	=> \$opt->{-dots    },
 	'force|f'	=> \$opt->{-force   },
 	'help|h|?'	=> \$opt->{-help    },
 	'man'		=> \$opt->{-man     },
-	'print|p'	=> \$opt->{-print   },
+	'name|n'	=> \$opt->{-name    },
+	'quiet|q'	=> \$opt->{-quiet   },
 	'requires|r'	=> \$opt->{-requires},
 	'uses|u'	=> \$opt->{-uses    },
-	'verbose|v+'	=> \$opt->{-verbose },
-	'versions|V'	=> \$opt->{-version },
+	'version|v'	=> \$opt->{-version },
     ) or $exitval = EXIT_GETOPTIONS_FAILED, goto DONE;
     ddump([$opt], [qw(opt)]) if DEBUG;
 
@@ -276,6 +381,8 @@ sub wanted_modroots
 	pod2usage(-exitval => 'NOEXIT', -verbose => 2);
 	goto DONE;
     }
+
+    $| = 1 if $opt->{-dots};
 
     ddump([-t STDIN], ['t_STDIN']) if DEBUG;
 
@@ -290,31 +397,33 @@ sub wanted_modroots
 
     find(\&wanted_modroots, @ARGV);
     ddump([\@modroots], [qw(*modroots)]) if DEBUG;
-
-    my $fmt = "%s\n";
-    $fmt = '%+13s   ' . $fmt if $opt->{-version};
+    print "\n" if $opt->{-dots};
 
     foreach (sort @modroots) {
 
-	print "\n";
+	print("# module root: ", $_, "\n")
+	    unless $opt->{-quiet};
 
-	print($_, "\n") if $opt->{-print};
+	do_command($_, $opt->{-command})
+	    if $opt->{-command};
 
-	do_version($_) if $opt->{-version};
+	do_name($_)
+	    if $opt->{-name} && !$opt->{-version};
 
-	if ($opt->{-uses}) {
-	    if ($opt->{-requires}) {
-		do_uses_requires($_);
-	    }
-	    else {
-		do_uses($_);
-	    }
-	}
-	elsif ($opt->{-requires}) {
-	    do_requires($_);
-	}
+	do_name_version($_)
+	    if $opt->{-name} && $opt->{-version};
 
-	do_command($_, $opt->{-command}) if $opt->{-command};
+	do_requires($_)
+	    if !$opt->{-uses} && $opt->{-requires};
+
+	do_uses($_)
+	    if $opt->{-uses} && !$opt->{-requires};
+
+	do_uses_requires($_)
+	    if $opt->{-uses} && $opt->{-requires};
+
+	do_version($_)
+	    if !$opt->{-name} && $opt->{-version};
     }
 
   DONE:
@@ -342,11 +451,15 @@ findpmr - find Perl module root directories
 
     Options:
 	--command, -c STRING  Call system(STRING) in directories found 
+	--dots, -d            Print dots for length operations
 	--force, -f           Ignore system() errors
 	--help, -h, -?        Print a brief help message and exit
 	--man                 Print the manual page and exit
-	--version, -V         Print module version
-	--verbose, -v         Print informational messages on STDERR
+	--name, -n            Print module name
+	--quiet, -q           Only print results
+	--requires, -r        Print modules require'd
+	--uses, -u            Print modules use'd
+	--version, -v         Print module version
 
 
 =head1 DESCRIPTION
@@ -354,47 +467,13 @@ findpmr - find Perl module root directories
 Recursively searchs PATH
 and prints paths to Perl module source code root directories.
 
-=head2 OPTIONS
-
-=head4 --command
-
-Invoke command STRING via system()
-in each Perl module root directory found.
-
-=head4 --force
-
-Ignore errors generated by system() calls.
-
-=head4 --help
-
-Prints SYNOPSIS and OPTIONS sections of documenation.
-
-=head4 --man
-
-Displays manual page via pager.
-
-=head4 --verbose
-
-Option may be given multiple times.
-More information is printed as verbosity increases.
-
-=head4 --version
-
-Prints the module version before the path for each module.
-
-If PATH is omitted,
-reads file/ directory names from STDIN (Unix filter).
+If PATH is omitted and STDIN is not connected to a terminal,
+reads arguments from STDIN (Unix filter).
 
 
 =head1 INSTALLATION
 
-Minimal:
-
-    cpan Dpchrist::Scripts
-
-Complete:
-
-    cpan Bundle::Dpchrist
+Installed as part of Dpchrist::Scripts.
 
 
 =head1 AUTHOR

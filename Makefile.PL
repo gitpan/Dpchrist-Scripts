@@ -1,5 +1,5 @@
 #######################################################################
-# $Id: Makefile.PL,v 1.12 2010-12-03 05:13:50 dpchrist Exp $
+# $Id: Makefile.PL,v 1.18 2010-12-13 03:30:32 dpchrist Exp $
 #
 # Copyright 2010 by David Paul Christensen dpchrist@holgerdanske.com
 #
@@ -27,16 +27,20 @@ warn $@ if $@;
 
 eval {
     require Dpchrist::ExtUtils::MakeMaker;
-    die 'Requires Dpchrist::ExtUtils::MakeMaker 1.013 or higher'
-    	unless 1.013 <= $Dpchrist::ExtUtils::MakeMaker::VERSION;
+    die 'Skipping Dpchrist::ExtUtils::MakeMaker'
+    	unless 1.021 <= $Dpchrist::ExtUtils::MakeMaker::VERSION;
     import  Dpchrist::ExtUtils::MakeMaker (
 	postamble => sub {
 	    my ($o, $prev) = @_;
 	    return join('',
 		$prev,
 		mcpani  ($o, $ENV{CPAN_AUTHORID}),
-		pod2html($o, qw( lib/Dpchrist/Scripts.pm
-				 perl-bin/findpmr )),
+		pod2html($o, qw(
+		    lib/Dpchrist/Scripts.pm
+   		    perl-bin/csvinfo
+		    perl-bin/findpmr
+		    perl-bin/pmver
+		)),
 		readme  ($o, 'lib/Dpchrist/Scripts.pm'),
 		release ($o, $ENV{RELEASE_ROOT}),
 	    );
@@ -49,29 +53,32 @@ WriteMakefile(
     NAME		=> 'Dpchrist::Scripts',
     VERSION_FROM	=> 'lib/Dpchrist/Scripts.pm',
     PREREQ_PM		=> {
-	Cwd				=> 0,
-	Data::Dumper			=> 0,
-	Dpchrist::Debug			=> 1.047,
-	Dpchrist::ExtUtils::MakeMaker	=> 1.015,
-	Dpchrist::LangUtil		=> 1.015,
-	ExtUtils::MakeMaker		=> 0,
-	File::Find			=> 0,
-	File::Slurp			=> 0,
-	File::Spec::Functions		=> 0,
-	Getopt::Long			=> 0,
-	Pod::Usage			=> 0,
-	Test::Compile			=> 0,
-	Test::Manifest			=> 0,
-	Test::More			=> 0,
-	Test::Pod			=> 0,
-	Test::Prereq			=> 0,
+	Capture::Tiny   		=> 0.06,
+	Cwd     			=> 3.2501,
+	Data::Dumper    		=> 2.121_14,
+	Dpchrist::Debug 		=> 1.048,
+	Dpchrist::Term  		=> 1.018,
+	ExtUtils::MakeMaker     	=> 6.54,
+	File::Find      		=> 1.12,
+	File::Slurp     		=> 9999.13,
+	File::Spec::Functions   	=> 3.2501,
+	Getopt::Long    		=> 2.37,
+	Pod::Usage      		=> 1.35,
+	Test::Compile   		=> 0.10,
+	Test::Manifest  		=> 1.22,
+	Test::More      		=> 0.72,
+	Test::Pod       		=> 1.40,
+	Test::Prereq    		=> 1.037,
+	Text::CSV_XS    		=> 0.52,
     },
     ABSTRACT_FROM	=> 'lib/Dpchrist/Scripts.pm',
     AUTHOR		=>
 	'David Paul Christensen dpchrist@holgerdanske.com',
-    EXE_FILES		=> [
-	'./perl-bin/findpmr',
-    ],
+    EXE_FILES		=> [ qw(
+	perl-bin/csvinfo
+	perl-bin/findpmr
+	perl-bin/pmver
+    )],
     clean		=> {
 	FILES => q( *~tmp */*~tmp *.tar debug.log ),
     },

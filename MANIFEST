@@ -2,7 +2,9 @@ Makefile.PL
 MANIFEST
 README
 lib/Dpchrist/Scripts.pm
+perl-bin/csvinfo
 perl-bin/findpmr
+perl-bin/pmver
 t/Dpchrist-Scripts.t
 t/test-compile-all_pl_files_ok-perl-bin.t
 t/test-compile-all_pm_files_ok.t

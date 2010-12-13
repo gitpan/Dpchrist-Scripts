@@ -1,5 +1,5 @@
 #######################################################################
-# $Id: Scripts.pm,v 1.14 2010-12-03 02:23:10 dpchrist Exp $
+# $Id: Scripts.pm,v 1.17 2010-12-04 19:36:22 dpchrist Exp $
 #######################################################################
 # package:
 #----------------------------------------------------------------------
@@ -9,7 +9,7 @@ package Dpchrist::Scripts;
 use strict;
 use warnings;
 
-our $VERSION = sprintf("%d.%03d", q$Revision: 1.14 $ =~ /(\d+)/g);
+our $VERSION = sprintf("%d.%03d", q$Revision: 1.17 $ =~ /(\d+)/g);
 
 1;
 
@@ -24,7 +24,7 @@ Dpchrist::Scripts - Perl scripts by David Christensen
 
 =head1 DESCRIPTION
 
-This documentation describes module revision $Revision: 1.14 $.
+This documentation describes module revision $Revision: 1.17 $.
 
 
 This is alpha test level software
@@ -59,7 +59,9 @@ See Makefile.PL in the source distribution root directory.
 
 =head1 SEE ALSO
 
+    man csvinfo
     man findpmr
+    man pmver
 
 
 =head1 AUTHOR
