@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Dpchrist-Scripts
-version:            1.018
+version:            1.019
 abstract:           Perl scripts by David Christensen
 author:
     - David Paul Christensen dpchrist@holgerdanske.com
@@ -14,8 +14,8 @@ requires:
     Capture::Tiny:        0.06
     Cwd:                  3.2501
     Data::Dumper:         2.12114
-    Dpchrist::Debug:      1.049
-    Dpchrist::Term:       1.019
+    Dpchrist::Debug:      1.05
+    Dpchrist::Term:       1.021
     ExtUtils::MakeMaker:  6.54
     File::Find:           1.12
     File::Slurp:          9999.13
